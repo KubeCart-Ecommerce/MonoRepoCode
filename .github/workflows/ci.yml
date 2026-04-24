@@ -42,11 +42,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Download Sonar Scanner CLI
-        run: |
-          curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.9.3.7185-linux.zip
-          unzip -q scanner.zip
-          chmod +x sonar-scanner-4.9.3.7185-linux/bin/sonar-scanner
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: Run SonarQube scan and save report
         run: |
