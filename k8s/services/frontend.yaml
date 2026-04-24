@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: dev
+data:
+  REACT_APP_AUTH_SERVICE_URL: ""
+  REACT_APP_PRODUCT_SERVICE_URL: ""
+  REACT_APP_ORDER_SERVICE_URL: ""
+  REACT_APP_CART_SERVICE_URL: ""
+  REACT_APP_PROFILE_SERVICE_URL: ""
+  REACT_APP_NOTIFICATION_SERVICE_URL: ""
+  REACT_APP_APP_NAME: "KubeCart"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: dev
+  labels:
+    app: frontend
+spec:
+  # Internal ClusterIP service for the frontend
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dev
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: aasiks/kubecart:frontend
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: frontend-config
+          # Readiness probe
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
