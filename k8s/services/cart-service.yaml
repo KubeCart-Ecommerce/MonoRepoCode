@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cart-service-config
+  namespace: dev
+data:
+  # Environment configs for the service
+  NODE_ENV: "production"
+  PORT: "3000"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cart-service-secret
+  namespace: dev
+type: Opaque
+stringData:
+  # Sensitive data: Database connection pointing to specific MongoDB
+  MONGO_URI: "mongodb://cart-mongo:27017/cart"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-service
+  namespace: dev
+  labels:
+    app: cart-service
+spec:
+  # Internal ClusterIP service for the application
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: cart-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  namespace: dev
+  labels:
+    app: cart-service
+spec:
+  # Microservice replicas set to 2
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cart-service
+  template:
+    metadata:
+      labels:
+        app: cart-service
+    spec:
+      containers:
+        - name: cart-service
+          image: aasiks/kubecart:cartservice
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: cart-service-config
+            - secretRef:
+                name: cart-service-secret
+          # Readiness probe pointing to /health
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          # Liveness probe pointing to /health
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          # Resource constraints for stable scheduling
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"

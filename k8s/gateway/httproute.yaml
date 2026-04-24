@@ -1,0 +1,54 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-routes
+  namespace: dev
+  labels:
+    app: api-gateway
+spec:
+  # Attach this route to our api-gateway
+  parentRefs:
+    - name: api-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/auth
+      backendRefs:
+        - name: auth-service
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/products
+      backendRefs:
+        - name: product-service
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/orders
+      backendRefs:
+        - name: order-service
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/cart
+      backendRefs:
+        - name: cart-service
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/profile
+      backendRefs:
+        - name: user-profile-service
+          port: 80
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/notifications
+      backendRefs:
+        - name: notification-service
+          port: 80

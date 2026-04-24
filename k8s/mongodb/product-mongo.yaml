@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-mongo
+  namespace: dev
+  labels:
+    app: product-mongo
+spec:
+  # Headless service for stable DNS resolution for the StatefulSet
+  clusterIP: None
+  ports:
+    - port: 27017
+      targetPort: 27017
+  selector:
+    app: product-mongo
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: product-mongo
+  namespace: dev
+  labels:
+    app: product-mongo
+spec:
+  serviceName: "product-mongo"
+  # Exactly 1 replica: keep Mongo as single-node persistent database
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-mongo
+  template:
+    metadata:
+      labels:
+        app: product-mongo
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:6
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+  # VolumeClaimTemplates using dynamic provisioning via nfs-storage
+  volumeClaimTemplates:
+    - metadata:
+        name: mongo-data
+      spec:
+        accessModes:
+          - ReadWriteMany
+        storageClassName: nfs-storage
+        resources:
+          requests:
+            storage: 5Gi
