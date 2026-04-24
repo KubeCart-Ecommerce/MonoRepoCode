@@ -1,0 +1,192 @@
+name: CI Testing Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+env:
+  SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+  SMTP_PORT: ${{ secrets.SMTP_PORT }}
+  SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  MAIL_RECIPIENTS: ${{ secrets.MAIL_RECIPIENTS }}
+  DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME }}
+  DOCKER_BUILD_CONTEXT: ./frontend
+  TRIVY_SEVERITY: CRITICAL,HIGH
+
+jobs:
+  checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+  sonar-scan:
+    needs: checkout
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download Sonar Scanner CLI
+        run: |
+          curl -sSLo scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.9.3.7185-linux.zip
+          unzip -q scanner.zip
+          chmod +x sonar-scanner-4.9.3.7185-linux/bin/sonar-scanner
+
+      - name: Run SonarQube scan and save report
+        run: |
+          mkdir -p .github/reports
+          ./sonar-scanner-4.9.3.7185-linux/bin/sonar-scanner \
+            -Dsonar.projectKey="${{ github.repository }}" \
+            -Dsonar.sources=. \
+            -Dsonar.host.url="${{ env.SONAR_HOST_URL }}" \
+            -Dsonar.login="${{ env.SONAR_TOKEN }}" \
+            -Dsonar.qualitygate.wait=false \
+            2>&1 | tee .github/reports/sonar-scan-output.txt || true
+
+      - name: Upload Sonar report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-report
+          path: .github/reports/sonar-scan-output.txt
+
+  snyk-scan:
+    needs: sonar-scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth "${{ env.SNYK_TOKEN }}"
+
+      - name: Run Snyk scan and save report
+        run: |
+          mkdir -p .github/reports
+          snyk test --json > .github/reports/snyk-report.json || true
+
+      - name: Upload Snyk report
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-report
+          path: .github/reports/snyk-report.json
+
+  docker-build:
+    needs: snyk-scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          mkdir -p .github/reports
+          docker build "${{ env.DOCKER_BUILD_CONTEXT }}" \
+            --tag "${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" \
+            2>&1 | tee .github/reports/docker-build-output.txt || true
+
+      - name: Upload Docker build report
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-report
+          path: .github/reports/docker-build-output.txt
+
+  trivy-scan:
+    needs: docker-build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      - name: Run Trivy scan and save report
+        run: |
+          mkdir -p .github/reports
+          trivy image --format json --output .github/reports/trivy-report.json \
+            --severity "${{ env.TRIVY_SEVERITY }}" \
+            "${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" || true
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: .github/reports/trivy-report.json
+
+  mail-report:
+    needs: trivy-scan
+    if: always()
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sonar-report
+          path: .github/reports/sonar
+
+      - name: Download report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: snyk-report
+          path: .github/reports/snyk
+
+      - name: Download report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-build-report
+          path: .github/reports/docker
+
+      - name: Download report artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-report
+          path: .github/reports/trivy
+
+      - name: Send email with report attachments
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ env.SMTP_SERVER }}
+          server_port: ${{ env.SMTP_PORT }}
+          username: ${{ env.SMTP_USERNAME }}
+          password: ${{ env.SMTP_PASSWORD }}
+          subject: "CI report for ${{ github.repository }} (#${{ github.run_number }})"
+          body: |
+            The CI testing workflow completed. Attached are the generated reports for SonarQube, Snyk, Docker build, and Trivy scanning.
+          to: ${{ env.MAIL_RECIPIENTS }}
+          from: ${{ env.SMTP_USERNAME }}
+          attachments: |
+            .github/reports/sonar/sonar-scan-output.txt
+            .github/reports/snyk/snyk-report.json
+            .github/reports/docker/docker-build-output.txt
+            .github/reports/trivy/trivy-report.json
