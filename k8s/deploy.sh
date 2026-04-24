@@ -21,7 +21,10 @@ sleep 5
 echo "⚙️  4. Deploying Node.js Microservices..."
 kubectl apply -f services/
 
-echo "🌐 5. Deploying Envoy API Gateway & HTTPRoutes..."
+echo "🖥️  5. Deploying Frontend Application..."
+kubectl apply -f frontend/
+
+echo "🌐 6. Deploying Envoy API Gateway & HTTPRoutes..."
 kubectl apply -f gateway/
 
 echo "✅ Deployment manifests applied successfully!"
