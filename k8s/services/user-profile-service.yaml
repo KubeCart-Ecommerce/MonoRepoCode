@@ -6,7 +6,7 @@ metadata:
 data:
   # Environment configs for the service
   NODE_ENV: "production"
-  PORT: "3000"
+  PORT: "4005"
 ---
 apiVersion: v1
 kind: Secret
@@ -16,7 +16,10 @@ metadata:
 type: Opaque
 stringData:
   # Sensitive data: Database connection pointing to specific MongoDB
-  MONGO_URI: "mongodb://profile-mongo:27017/profile"
+  MONGO_URI: "mongodb://profile-mongo:27017/profile_db"
+  JWT_SECRET: "change_this_to_a_strong_secret_min_32_characters"
+  FRONTEND_URL: "http://frontend-service.dev.svc.cluster.local:3000"
+  LOG_LEVEL: "info"
 ---
 apiVersion: v1
 kind: Service
@@ -29,8 +32,8 @@ spec:
   # Internal ClusterIP service for the application
   type: ClusterIP
   ports:
-    - port: 80
-      targetPort: 3000
+    - port: 4005
+      targetPort: 4005
       protocol: TCP
   selector:
     app: user-profile-service
@@ -58,7 +61,7 @@ spec:
           image: aasiks/kubecart:user-profile-service
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 3000
+            - containerPort: 4005
           envFrom:
             - configMapRef:
                 name: user-profile-service-config
@@ -68,14 +71,14 @@ spec:
           readinessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: 4005
             initialDelaySeconds: 10
             periodSeconds: 5
           # Liveness probe pointing to /health
           livenessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: 4005
             initialDelaySeconds: 15
             periodSeconds: 10
           # Resource constraints for stable scheduling
