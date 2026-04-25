@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-profile-service-config
+  namespace: dev
+data:
+  # Environment configs for the service
+  NODE_ENV: "production"
+  PORT: "4005"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: user-profile-service-secret
+  namespace: dev
+type: Opaque
+stringData:
+  # Sensitive data: Database connection pointing to specific MongoDB
+  MONGO_URI: "mongodb://profile-mongo:27017/profile_db"
+  JWT_SECRET: "change_this_to_a_strong_secret_min_32_characters"
+  FRONTEND_URL: "http://frontend-service.dev.svc.cluster.local:3000"
+  LOG_LEVEL: "info"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-profile-service
+  namespace: dev
+  labels:
+    app: user-profile-service
+spec:
+  # Internal ClusterIP service for the application
+  type: ClusterIP
+  ports:
+    - port: 4005
+      targetPort: 4005
+      protocol: TCP
+  selector:
+    app: user-profile-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-profile-service
+  namespace: dev
+  labels:
+    app: user-profile-service
+spec:
+  # Microservice replicas set to 2
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-profile-service
+  template:
+    metadata:
+      labels:
+        app: user-profile-service
+    spec:
+      containers:
+        - name: user-profile-service
+          image: aasiks/kubecart:user-profile-service
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4005
+          envFrom:
+            - configMapRef:
+                name: user-profile-service-config
+            - secretRef:
+                name: user-profile-service-secret
+          # Readiness probe pointing to /health
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4005
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          # Liveness probe pointing to /health
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4005
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          # Resource constraints for stable scheduling
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
