@@ -5,7 +5,7 @@ metadata:
   annotations:
     storageclass.kubernetes.io/is-default-class: "true"
 # Provisioner for nfs-subdir-external-provisioner installed via Helm
-provisioner: k8s-sigs.io/nfs-subdir-external-provisioner
+provisioner: cluster.local/dev-nfs-provisioner-nfs-subdir-external-provisioner
 parameters:
   archiveOnDelete: "true"
 # Retain policy to ensure we don't accidentally lose database storage
