@@ -34,3 +34,6 @@ dependencies:
   - name: storage
     version: 0.1.0
     repository: file://charts/storage
+  - name: grafana-nodeport
+    version: 0.1.0
+    repository: file://charts/grafana-nodeport
